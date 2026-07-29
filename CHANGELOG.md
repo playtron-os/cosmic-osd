@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/playtron-os/cosmic-osd/compare/v1.0.0...v1.1.0) (2026-07-29)
+
+
+### Features
+
+* let a panel popup suppress the value OSD ([48d5db7](https://github.com/playtron-os/cosmic-osd/commit/48d5db75e951632dcbf3e236e962823cb32ce748))
+
 # 1.0.0 (2026-07-24)
 
 
