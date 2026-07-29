@@ -3,7 +3,7 @@ use crate::components::{osd_indicator, polkit_dialog};
 use crate::cosmic_session::CosmicSessionProxy;
 use crate::fl;
 use crate::session_manager::SessionManagerProxy;
-use crate::subscriptions::{dbus, polkit_agent};
+use crate::subscriptions::{dbus, osd_inhibit, polkit_agent};
 use clap::Parser;
 use cosmic::app::{CosmicFlags, Task};
 use cosmic::cctk::sctk::shell::wlr_layer;
@@ -196,6 +196,7 @@ pub enum Msg {
     Focused,
     Headphones(bool),
     PolkitAgent(polkit_agent::Event),
+    OsdInhibit(osd_inhibit::Event),
     PolkitDialog((SurfaceId, polkit_dialog::Msg)),
     SettingsDaemon(settings_daemon::Event),
     OsdIndicator(osd_indicator::Msg),
@@ -224,6 +225,9 @@ pub(crate) struct App {
     core: cosmic::app::Core,
     #[allow(dead_code)]
     connection: Option<zbus::Connection>,
+    /// While set and in the future, value OSDs (volume, brightness) are held
+    /// back — a panel popup is showing its own slider for the same value.
+    value_osd_suppressed_until: Option<Instant>,
     settings_connection: Option<zbus::Connection>,
     system_connection: Option<zbus::Connection>,
     surfaces: HashMap<SurfaceId, Surface>,
@@ -277,6 +281,23 @@ impl App {
             )),
             self.handle_overlap(),
         ])
+    }
+
+    /// True while a panel popup is showing its own slider for the value that
+    /// just changed, so an OSD would be the second control for one action.
+    fn value_osd_suppressed(&self) -> bool {
+        self.value_osd_suppressed_until
+            .is_some_and(|until| Instant::now() < until)
+    }
+
+    /// [`create_indicator`](Self::create_indicator) for volume and brightness,
+    /// which a panel popup can suppress. Display identifiers, airplane mode and
+    /// the like are never suppressed — nothing else on screen shows them.
+    fn create_value_indicator(&mut self, params: osd_indicator::Params) -> cosmic::app::Task<Msg> {
+        if self.value_osd_suppressed() {
+            return Task::none();
+        }
+        self.create_indicator(params)
     }
 
     fn create_indicator(&mut self, params: osd_indicator::Params) -> cosmic::app::Task<Msg> {
@@ -517,6 +538,7 @@ impl cosmic::Application for App {
         let mut app = Self {
             core,
             connection: None,
+            value_osd_suppressed_until: None,
             settings_connection: None,
             system_connection: None,
             surfaces: HashMap::new(),
@@ -623,6 +645,11 @@ impl cosmic::Application for App {
                 }
                 iced::Task::none()
             }
+            Msg::OsdInhibit(osd_inhibit::Event::SuppressFor(millis)) => {
+                self.value_osd_suppressed_until =
+                    Some(Instant::now() + Duration::from_millis(millis));
+                Task::none()
+            }
             Msg::PolkitAgent(event) => match event {
                 polkit_agent::Event::CreateDialog(params) => {
                     log::trace!("create polkit dialog: {}", params.cookie);
@@ -702,15 +729,15 @@ impl cosmic::Application for App {
                         if max <= 20 {
                             // Coarse displays: rung_ratio=(raw+1)/20
                             let rung_ratio = ((brightness + 1) as f64) / 20.0;
-                            self.create_indicator(osd_indicator::Params::DisplayBrightness(
+                            self.create_value_indicator(osd_indicator::Params::DisplayBrightness(
                                 rung_ratio,
                             ))
                         } else {
                             // Fine displays: exact integer percent from raw/max
                             let ratio = (brightness as f64) / (max as f64);
-                            self.create_indicator(osd_indicator::Params::DisplayBrightnessExact(
-                                ratio,
-                            ))
+                            self.create_value_indicator(
+                                osd_indicator::Params::DisplayBrightnessExact(ratio),
+                            )
                         }
                     } else {
                         Task::none()
@@ -736,11 +763,10 @@ impl cosmic::Application for App {
                             self.sink_last_playback = now;
                             pipewire::play_audio_volume_change();
                         }
-                        self.create_indicator(osd_indicator::Params::SinkVolume(volume, mute))
+                        self.create_value_indicator(osd_indicator::Params::SinkVolume(volume, mute))
                     }
-                    Some(super::audio::Response::SourceVolume(volume, mute)) => {
-                        self.create_indicator(osd_indicator::Params::SourceVolume(volume, mute))
-                    }
+                    Some(super::audio::Response::SourceVolume(volume, mute)) => self
+                        .create_value_indicator(osd_indicator::Params::SourceVolume(volume, mute)),
                 }
             }
             Msg::AirplaneMode(state) => {
@@ -1137,6 +1163,12 @@ impl cosmic::Application for App {
 
         if let Some(connection) = self.system_connection.clone() {
             subscriptions.push(polkit_agent::subscription(connection).map(Msg::PolkitAgent));
+        }
+
+        // Served on the name-holding session connection, so clients can reach it
+        // at com.system76.CosmicOsd.
+        if let Some(connection) = self.connection.clone() {
+            subscriptions.push(osd_inhibit::subscription(connection).map(Msg::OsdInhibit));
         }
 
         if let Some(connection) = self.settings_connection.clone() {
