@@ -35,45 +35,60 @@ pub enum Params {
 }
 
 impl Params {
-    fn icon_name(&self) -> &'static str {
+    /// Lucide glyph for this indicator.
+    ///
+    /// Vendored under `res/icons/lucide` rather than pulled from the icon theme:
+    /// the rest of the Humain shell draws Lucide, and `from_name` would resolve
+    /// whatever the active icon theme happens to ship, which is a different
+    /// drawing style entirely.
+    fn icon_bytes(&self) -> &'static [u8] {
+        const VOLUME_X: &[u8] = include_bytes!("../../res/icons/lucide/volume-x.svg");
+        const VOLUME_1: &[u8] = include_bytes!("../../res/icons/lucide/volume-1.svg");
+        const VOLUME_2: &[u8] = include_bytes!("../../res/icons/lucide/volume-2.svg");
+        const MIC: &[u8] = include_bytes!("../../res/icons/lucide/mic.svg");
+        const MIC_OFF: &[u8] = include_bytes!("../../res/icons/lucide/mic-off.svg");
+        const SUN: &[u8] = include_bytes!("../../res/icons/lucide/sun.svg");
+        const KEYBOARD: &[u8] = include_bytes!("../../res/icons/lucide/keyboard.svg");
+        const LAPTOP: &[u8] = include_bytes!("../../res/icons/lucide/laptop.svg");
+        const MONITOR: &[u8] = include_bytes!("../../res/icons/lucide/monitor.svg");
+        const PLANE: &[u8] = include_bytes!("../../res/icons/lucide/plane.svg");
+        const WIFI: &[u8] = include_bytes!("../../res/icons/lucide/wifi.svg");
+        const TOUCHPAD: &[u8] = include_bytes!("../../res/icons/lucide/touchpad.svg");
+        const TOUCHPAD_OFF: &[u8] = include_bytes!("../../res/icons/lucide/touchpad-off.svg");
+
         match self {
-            Self::DisplayBrightness(_) | Self::DisplayBrightnessExact(_) => {
-                "display-brightness-symbolic"
-            }
-            Self::DisplayToggle(DisplayMode::All) => "laptop-symbolic",
-            Self::DisplayToggle(DisplayMode::External) => "display-symbolic",
+            Self::DisplayBrightness(_) | Self::DisplayBrightnessExact(_) => SUN,
+            Self::DisplayToggle(DisplayMode::All) => LAPTOP,
+            Self::DisplayToggle(DisplayMode::External) => MONITOR,
             Self::DisplayNumber(_) => {
-                unreachable!("DisplayNumber uses custom rendering and should not call icon_name()")
+                unreachable!("DisplayNumber uses custom rendering and should not call icon_bytes()")
             }
-            Self::KeyboardBrightness(_) => "keyboard-brightness-symbolic",
-            Self::AirplaneMode(true) => "airplane-mode-symbolic",
-            Self::AirplaneMode(false) => "airplane-mode-disabled-symbolic",
+            // Lucide has no keyboard-backlight glyph; the keyboard reads as the
+            // thing being lit, and the bar beside it carries the level.
+            Self::KeyboardBrightness(_) => KEYBOARD,
+            // This OSD is icon-only, so the two states must differ by glyph:
+            // a plane going into airplane mode, and radios back on coming out
+            // of it. Lucide has no struck-through plane.
+            Self::AirplaneMode(true) => PLANE,
+            Self::AirplaneMode(false) => WIFI,
             Self::SinkVolume(volume, muted) => {
                 if *volume == 0 || *muted {
-                    "audio-volume-muted-symbolic"
-                } else if *volume < 33 {
-                    "audio-volume-low-symbolic"
-                } else if *volume < 66 {
-                    "audio-volume-medium-symbolic"
-                } else if *volume <= 100 {
-                    "audio-volume-high-symbolic"
+                    VOLUME_X
+                } else if *volume < 50 {
+                    VOLUME_1
                 } else {
-                    "audio-volume-overamplified-symbolic"
+                    VOLUME_2
                 }
             }
-            Self::SourceVolume(volume, muted) => {
-                if *volume == 0 || *muted {
-                    "microphone-sensitivity-muted-symbolic"
-                } else if *volume < 33 {
-                    "microphone-sensitivity-low-symbolic"
-                } else if *volume < 66 {
-                    "microphone-sensitivity-medium-symbolic"
+            Self::SourceVolume(_, muted) => {
+                if *muted {
+                    MIC_OFF
                 } else {
-                    "microphone-sensitivity-high-symbolic"
+                    MIC
                 }
             }
-            Self::TouchpadEnabled(TouchpadOverride::None) => "input-touchpad-symbolic",
-            Self::TouchpadEnabled(TouchpadOverride::ForceDisable) => "touchpad-disabled-symbolic",
+            Self::TouchpadEnabled(TouchpadOverride::None) => TOUCHPAD,
+            Self::TouchpadEnabled(TouchpadOverride::ForceDisable) => TOUCHPAD_OFF,
         }
     }
 
@@ -312,7 +327,11 @@ impl State {
             return self.view_display_number(display_number);
         }
 
-        let icon = widget::icon::from_name(self.params.icon_name());
+        // `symbolic` lets the theme recolor the glyph; the vendored SVGs stroke
+        // with `currentColor` for exactly that.
+        let mut handle = widget::icon::from_svg_bytes(self.params.icon_bytes());
+        handle.symbolic = true;
+        let icon = widget::icon::icon(handle);
 
         // Use large radius on value-OSD to enforce pill-shape with "Round" system style
         let radius;
