@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/playtron-os/cosmic-osd/compare/v1.1.0...v1.2.0) (2026-07-29)
+
+
+### Features
+
+* draw the OSD with Lucide icons ([a4ccef6](https://github.com/playtron-os/cosmic-osd/commit/a4ccef6baa4136cd634932cb17b34374c92b3e1b)), closes [struck-throu#plane](https://github.com/struck-throu/issues/plane)
+
 # [1.1.0](https://github.com/playtron-os/cosmic-osd/compare/v1.0.0...v1.1.0) (2026-07-29)
 
 
