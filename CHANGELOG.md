@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/playtron-os/cosmic-osd/compare/v1.2.0...v1.2.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* **theme:** build against the fork so light mode is respected ([5040186](https://github.com/playtron-os/cosmic-osd/commit/5040186973e8772c1e4a16d265dcf37a5f22742e))
+
 # [1.2.0](https://github.com/playtron-os/cosmic-osd/compare/v1.1.0...v1.2.0) (2026-07-29)
 
 
