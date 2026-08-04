@@ -52,15 +52,39 @@ git = "https://github.com/pop-os/cosmic-settings"
 [dependencies.cosmic-settings-daemon-subscription]
 git = "https://github.com/pop-os/cosmic-settings"
 
+# Build against the Playtron libcosmic fork.
+#
+# `fix/theme-seed-8cb10bf` is upstream 8cb10bf (the base this crate's surface
+# APIs require) plus the per-mode theme-seed fix. Without it, `system_light()`
+# loads the light config on top of `Theme::default()` == `preferred_theme()`,
+# which is dark on any desktop whose XDG_CURRENT_DESKTOP lacks "gnome"
+# (HUMAIN:COSMIC). With no `/usr/share/cosmic/com.system76.CosmicTheme.Light`
+# layer installed, every colour key is absent, so light mode renders the dark
+# palette — the polkit dialog and the OSD come up dark on a light desktop.
+#
+# The fork's `master` cannot be used here: its base predates the surface
+# rewrite and has no `cosmic::surface::{surface_task, action::*}`.
+#
+# Every crate from this source must be listed. Patching only some leaves the
+# rest on pop-os and links two incompatible copies of `iced_core`.
 [patch.'https://github.com/pop-os/libcosmic']
-# libcosmic = { path = "../libcosmic" }
-# cosmic-config = { path = "../libcosmic/cosmic-config" }
-# cosmic-theme = { path = "../libcosmic/cosmic-theme" }
-# iced_futures = { path = "../libcosmic/iced/futures" }
-# iced_futures = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# libcosmic = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# cosmic-config = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
-# cosmic-theme = { git = "https://github.com/pop-os/libcosmic//", branch = "theme-v2" }
+libcosmic = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+cosmic-config = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+cosmic-config-derive = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+cosmic-theme = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_accessibility = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_core = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_debug = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_futures = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_graphics = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_program = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_renderer = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_runtime = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_tiny_skia = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_wgpu = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_widget = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
+iced_winit = { git = "https://github.com/playtron-os/libcosmic.git", branch = "fix/theme-seed-8cb10bf" }
 
 [profile.release]
 lto = "thin"
