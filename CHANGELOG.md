@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/playtron-os/cosmic-osd/compare/v1.2.1...v1.2.2) (2026-08-11)
+
+
+### Bug Fixes
+
+* don't show the volume OSD for PipeWire's initial state ([64312d0](https://github.com/playtron-os/cosmic-osd/commit/64312d06f219fbdba9a754bc027fa03916ce7a34))
+
 ## [1.2.1](https://github.com/playtron-os/cosmic-osd/compare/v1.2.0...v1.2.1) (2026-08-04)
 
 
