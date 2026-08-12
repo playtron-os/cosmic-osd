@@ -2,6 +2,7 @@ use crate::components::osd_indicator::Params;
 use crate::components::{osd_indicator, polkit_dialog};
 use crate::cosmic_session::CosmicSessionProxy;
 use crate::fl;
+use crate::icons::{self, CPU, HEADPHONES, HEADSET, LOG_OUT, POWER, ROTATE_CCW, lucide_icon};
 use crate::session_manager::SessionManagerProxy;
 use crate::subscriptions::{dbus, osd_inhibit, polkit_agent};
 use clap::Parser;
@@ -28,7 +29,7 @@ use cosmic::iced::widget::operation::focus;
 use cosmic::iced::window::{self, Id as SurfaceId};
 use cosmic::iced::{self, Alignment, Length, Limits, Point, Rectangle, Size, Subscription, time};
 use cosmic::surface::action::{LiveSettings, simple_layer_shell};
-use cosmic::widget::{self, autosize, button, container, icon, text};
+use cosmic::widget::{self, autosize, button, container, text};
 use cosmic::{Apply, Element, theme};
 use cosmic_comp_config::input::TouchpadOverride;
 use cosmic_settings_airplane_mode_subscription as airplane_mode;
@@ -1326,54 +1327,34 @@ impl cosmic::Application for App {
                     )
                     .control(
                         widget::row::with_children([
-                            widget::column::with_children([
-                                button::custom_image_button(
-                                    container(
-                                        icon::from_name("audio-headphones-symbolic")
-                                            .size(64)
-                                            .icon(),
-                                    )
-                                    .padding(t.space_m()),
-                                    None,
-                                )
-                                .class(cosmic::theme::style::Button::Image)
-                                .selected(matches!(
+                            device_tile(
+                                HEADPHONES,
+                                fl!("headphones"),
+                                matches!(
                                     self.action_to_confirm,
                                     Some((_, OsdTask::ConfirmHeadphones {
                                         selected_headset,
                                         ..
                                     },_)) if !selected_headset
-                                ))
-                                .on_press(Msg::Headphones(false))
-                                .into(),
-                                text::body(fl!("headphones")).into(),
-                            ])
-                            .align_x(Alignment::Center)
-                            .spacing(t.space_xxxs())
-                            .into(),
-                            widget::column::with_children([
-                                button::custom_image_button(
-                                    container(
-                                        icon::from_name("audio-headset-symbolic").size(64).icon(),
-                                    )
-                                    .padding(t.space_m()),
-                                    None,
-                                )
-                                .class(cosmic::theme::style::Button::Image)
-                                .selected(matches!(
+                                ),
+                                Msg::Headphones(false),
+                                t.space_xxxs(),
+                                t.space_m(),
+                            ),
+                            device_tile(
+                                HEADSET,
+                                fl!("headset"),
+                                matches!(
                                     self.action_to_confirm,
                                     Some((_, OsdTask::ConfirmHeadphones {
                                         selected_headset,
                                         ..
                                     },_)) if selected_headset
-                                ))
-                                .on_press(Msg::Headphones(true))
-                                .into(),
-                                text::body(fl!("headset")).into(),
-                            ])
-                            .align_x(Alignment::Center)
-                            .spacing(t.space_xxxs())
-                            .into(),
+                                ),
+                                Msg::Headphones(true),
+                                t.space_xxxs(),
+                                t.space_m(),
+                            ),
                         ])
                         .spacing(t.space_l())
                         .apply(container)
@@ -1381,11 +1362,14 @@ impl cosmic::Application for App {
                     )
             } else {
                 dialog
-                    .icon(text_icon(
+                    .icon(lucide_icon(
                         match cur_action {
-                            OsdTask::LogOut => "system-log-out-symbolic",
-                            OsdTask::Restart | OsdTask::EnterBios => "system-restart-symbolic",
-                            OsdTask::Shutdown => "system-shutdown-symbolic",
+                            OsdTask::LogOut => LOG_OUT,
+                            OsdTask::Restart => ROTATE_CCW,
+                            // Rebooting into firmware setup, not a plain restart: the
+                            // chip is the standard firmware mark.
+                            OsdTask::EnterBios => CPU,
+                            OsdTask::Shutdown => POWER,
                             _ => unreachable!(),
                         },
                         60,
@@ -1668,6 +1652,47 @@ fn min_width_and_height(
     .align_x(Alignment::Center)
 }
 
-fn text_icon(name: &str, size: u16) -> widget::Icon {
-    icon::from_name(name).size(size).symbolic(true).icon()
+/// One of the two device tiles in the headphones/headset confirmation.
+///
+/// `button::custom_image_button` would stamp a theme-resolved tick into its
+/// selected badge, so this uses a plain button — keeping the `Image` class for
+/// the accent border — and draws the tick as a Lucide glyph in the tile itself.
+fn device_tile<'a>(
+    glyph: &'static [u8],
+    label: String,
+    selected: bool,
+    msg: Msg,
+    spacing: u16,
+    padding: u16,
+) -> Element<'a, Msg> {
+    const TICK_SIZE: u16 = 16;
+
+    let tick: Element<'a, Msg> = if selected {
+        lucide_icon(icons::CHECK, TICK_SIZE).into()
+    } else {
+        // Reserve the tick's box so picking a device doesn't resize the tiles.
+        widget::Space::new()
+            .width(Length::Fixed(f32::from(TICK_SIZE)))
+            .height(Length::Fixed(f32::from(TICK_SIZE)))
+            .into()
+    };
+
+    widget::column::with_children(vec![
+        button::custom(
+            container(
+                widget::column::with_children(vec![lucide_icon(glyph, 64).into(), tick])
+                    .align_x(Alignment::Center)
+                    .spacing(spacing),
+            )
+            .padding(padding),
+        )
+        .class(theme::style::Button::Image)
+        .selected(selected)
+        .on_press(msg)
+        .into(),
+        text::body(label).into(),
+    ])
+    .align_x(Alignment::Center)
+    .spacing(spacing)
+    .into()
 }

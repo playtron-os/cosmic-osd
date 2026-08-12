@@ -3,6 +3,7 @@
 
 use crate::components::app::DisplayMode;
 use crate::config;
+use crate::icons::lucide_icon;
 use cosmic::iced::platform_specific::shell::commands::layer_surface::{
     Anchor, KeyboardInteractivity, Layer, destroy_layer_surface,
 };
@@ -42,19 +43,10 @@ impl Params {
     /// whatever the active icon theme happens to ship, which is a different
     /// drawing style entirely.
     fn icon_bytes(&self) -> &'static [u8] {
-        const VOLUME_X: &[u8] = include_bytes!("../../res/icons/lucide/volume-x.svg");
-        const VOLUME_1: &[u8] = include_bytes!("../../res/icons/lucide/volume-1.svg");
-        const VOLUME_2: &[u8] = include_bytes!("../../res/icons/lucide/volume-2.svg");
-        const MIC: &[u8] = include_bytes!("../../res/icons/lucide/mic.svg");
-        const MIC_OFF: &[u8] = include_bytes!("../../res/icons/lucide/mic-off.svg");
-        const SUN: &[u8] = include_bytes!("../../res/icons/lucide/sun.svg");
-        const KEYBOARD: &[u8] = include_bytes!("../../res/icons/lucide/keyboard.svg");
-        const LAPTOP: &[u8] = include_bytes!("../../res/icons/lucide/laptop.svg");
-        const MONITOR: &[u8] = include_bytes!("../../res/icons/lucide/monitor.svg");
-        const PLANE: &[u8] = include_bytes!("../../res/icons/lucide/plane.svg");
-        const WIFI: &[u8] = include_bytes!("../../res/icons/lucide/wifi.svg");
-        const TOUCHPAD: &[u8] = include_bytes!("../../res/icons/lucide/touchpad.svg");
-        const TOUCHPAD_OFF: &[u8] = include_bytes!("../../res/icons/lucide/touchpad-off.svg");
+        use crate::icons::{
+            KEYBOARD, LAPTOP, MIC, MIC_OFF, MONITOR, PLANE, SUN, TOUCHPAD, TOUCHPAD_OFF, VOLUME_1,
+            VOLUME_2, VOLUME_X, WIFI,
+        };
 
         match self {
             Self::DisplayBrightness(_) | Self::DisplayBrightnessExact(_) => SUN,
@@ -327,11 +319,7 @@ impl State {
             return self.view_display_number(display_number);
         }
 
-        // `symbolic` lets the theme recolor the glyph; the vendored SVGs stroke
-        // with `currentColor` for exactly that.
-        let mut handle = widget::icon::from_svg_bytes(self.params.icon_bytes());
-        handle.symbolic = true;
-        let icon = widget::icon::icon(handle);
+        let glyph = self.params.icon_bytes();
 
         // Use large radius on value-OSD to enforce pill-shape with "Round" system style
         let radius;
@@ -350,7 +338,7 @@ impl State {
             .width(Length::Fixed(266.0));
 
             iced::widget::row![
-                widget::container(icon.size(20)).center_x(Length::Fixed(32.0)),
+                widget::container(lucide_icon(glyph, 20)).center_x(Length::Fixed(32.0)),
                 widget::text::body(format!("{}%", value))
                     .width(Length::Fixed(32.0))
                     .center(),
@@ -364,7 +352,7 @@ impl State {
         } else {
             radius = cosmic::theme::active().cosmic().radius_m();
             const ICON_SIZE: u16 = 112;
-            widget::container(icon.size(ICON_SIZE))
+            widget::container(lucide_icon(glyph, ICON_SIZE))
                 .width(ICON_SIZE + 2 * cosmic::theme::active().cosmic().space_l())
                 .height(ICON_SIZE + 2 * cosmic::theme::active().cosmic().space_s())
         }

@@ -3,6 +3,7 @@
 #![allow(clippy::single_match)]
 
 use crate::fl;
+use crate::icons::{self, lucide_icon};
 use crate::subscriptions::polkit_agent::PolkitError;
 use crate::subscriptions::polkit_agent_helper;
 use cosmic::iced::event::{PlatformSpecific, wayland};
@@ -191,13 +192,37 @@ impl State {
 
         let placeholder = self.password_label.trim_end_matches(':');
         let mut password_input = if !self.echo {
-            widget::secure_input(
-                placeholder,
-                &self.password,
-                Some(Msg::TogglePasswordVisibility),
-                !self.password_visible,
+            // Inlined `widget::secure_input`, whose leading/trailing icons come from
+            // the icon theme. Same padding, style, sizes and message wiring; only the
+            // glyphs differ, and the toggle now reads as the action it performs
+            // (eye = reveal, eye-off = conceal) rather than libcosmic's mapping.
+            let spacing = cosmic::theme::active().cosmic().space_xxs();
+            let mut input = widget::TextInput::new(placeholder, &self.password)
+                .id(self.text_input_id.clone())
+                .padding([0, spacing])
+                .style(cosmic::theme::TextInput::Default)
+                .leading_icon(
+                    widget::container(lucide_icon(icons::LOCK, 16))
+                        .padding(8)
+                        .into(),
+                );
+            if !self.password_visible {
+                input = input.password();
+            }
+            input.trailing_icon(
+                widget::button::custom(lucide_icon(
+                    if self.password_visible {
+                        icons::EYE_OFF
+                    } else {
+                        icons::EYE
+                    },
+                    16,
+                ))
+                .class(cosmic::theme::Button::Icon)
+                .on_press(Msg::TogglePasswordVisibility)
+                .padding(8)
+                .into(),
             )
-            .id(self.text_input_id.clone())
         } else {
             widget::text_input(placeholder, &self.password).id(self.text_input_id.clone())
         };
@@ -224,13 +249,23 @@ impl State {
         } else {
             right_column.push(widget::text::body("").into())
         }
-        let icon = widget::icon::from_name(
-            self.params
-                .icon_name
-                .as_deref()
-                .unwrap_or("dialog-authentication"),
-        )
-        .size(64);
+        // The polkit action supplies its own identity icon, so that path stays
+        // resolved through the icon theme; only our own fallback is Lucide.
+        // A name the theme doesn't ship resolves to an empty handle in libcosmic,
+        // so check the lookup and take the fallback rather than draw a 64px hole.
+        let named = self
+            .params
+            .icon_name
+            .as_deref()
+            // `fallback(None)` disables libcosmic's prefix-truncation chain, which
+            // would resolve "drive-harddisk-usb" to "drive" and pass this filter
+            // with a glyph that is not the action's icon at all.
+            .map(|name| widget::icon::from_name(name).fallback(None).size(64))
+            .filter(|named| named.clone().path().is_some());
+        let icon: cosmic::Element<_> = match named {
+            Some(named) => named.into(),
+            None => lucide_icon(icons::LOCK_KEYHOLE, 64).into(),
+        };
         widget::autosize::autosize(
             widget::dialog::dialog()
                 .title(&self.msg_authentication_required)

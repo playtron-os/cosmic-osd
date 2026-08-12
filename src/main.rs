@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 mod components;
 mod config;
 pub mod cosmic_session;
+mod icons;
 pub mod session_manager;
 mod subscriptions;
 
