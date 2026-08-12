@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/playtron-os/cosmic-osd/compare/v1.2.2...v1.3.0) (2026-08-12)
+
+
+### Features
+
+* **icons:** draw the rest of the UI with Lucide icons ([6eba2cf](https://github.com/playtron-os/cosmic-osd/commit/6eba2cf2d42afb5f0ceb87c8b8bc81bf23c7fd40))
+
 ## [1.2.2](https://github.com/playtron-os/cosmic-osd/compare/v1.2.1...v1.2.2) (2026-08-11)
 
 
