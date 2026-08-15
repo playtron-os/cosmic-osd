@@ -1,7 +1,8 @@
 use cosmic::iced::{self, Subscription};
 use futures::SinkExt;
+use std::ffi::OsString;
 use std::ops::ControlFlow;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::{fmt, io};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, BufWriter};
@@ -14,24 +15,54 @@ use tokio::sync::mpsc::{self, Sender};
 const HELPER_BIN_PATH: Option<&str> = option_env!("POLKIT_AGENT_HELPER_1");
 const HELPER_SOCKET_PATH: &str = "/run/polkit/agent-helper.socket";
 
-// polkit-agent-helper-1 lives in different places per distro. Honor the
-// compile-time override, else probe known paths (Fedora/Debian use
-// /usr/lib/polkit-1) so we don't ENOENT on a single hardcoded path.
+// polkit-agent-helper-1 lives in different places per distro, and on Nix-style
+// systems in a store path nobody can know at build time. Probe known locations
+// (Fedora/Debian use /usr/lib/polkit-1) so we don't ENOENT on a single
+// hardcoded path.
 const HELPER_BIN_CANDIDATES: &[&str] = &[
     "/usr/lib/polkit-1/polkit-agent-helper-1",
     "/usr/libexec/polkit-1/polkit-agent-helper-1",
     "/usr/libexec/polkit-agent-helper-1",
+    // Nix-style systems: the setuid wrapper, then the system profile. The store
+    // copy cannot carry the setuid bit, so the wrapper has to be preferred.
+    "/run/wrappers/bin/polkit-agent-helper-1",
+    "/run/current-system/sw/lib/polkit-1/polkit-agent-helper-1",
 ];
 
-fn resolve_helper_bin_path() -> &'static str {
-    if let Some(path) = HELPER_BIN_PATH {
-        return path;
+/// Locate the `polkit-agent-helper-1` binary that runs the PAM conversation.
+///
+/// The runtime environment wins over the compile-time override: a package whose
+/// helper lives outside the FHS can point `POLKIT_AGENT_HELPER_1` at it without
+/// patching or rebuilding us. With the variable unset — the normal case on
+/// Fedora — this resolves exactly as before.
+fn resolve_helper_bin_path() -> Option<PathBuf> {
+    resolve_helper_bin_path_in(
+        std::env::var_os("POLKIT_AGENT_HELPER_1"),
+        HELPER_BIN_PATH,
+        HELPER_BIN_CANDIDATES,
+        &|path| path.exists(),
+    )
+}
+
+fn resolve_helper_bin_path_in(
+    runtime_override: Option<OsString>,
+    compiled_override: Option<&str>,
+    candidates: &[&str],
+    exists: &dyn Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    if let Some(path) = runtime_override.filter(|path| !path.is_empty()) {
+        return Some(PathBuf::from(path));
     }
-    HELPER_BIN_CANDIDATES
+
+    if let Some(path) = compiled_override.filter(|path| !path.is_empty()) {
+        return Some(PathBuf::from(path));
+    }
+
+    candidates
         .iter()
-        .copied()
-        .find(|path| Path::new(path).exists())
-        .unwrap_or("/usr/libexec/polkit-agent-helper-1")
+        .map(Path::new)
+        .find(|path| exists(path))
+        .map(Path::to_path_buf)
 }
 
 #[derive(Clone, Debug)]
@@ -217,8 +248,17 @@ impl AgentHelper {
     async fn new_bin(pw_name: &str) -> io::Result<Self> {
         log::info!("using binary");
 
-        let helper_bin_path = resolve_helper_bin_path();
-        log::trace!("using helper binary from: {helper_bin_path}");
+        let Some(helper_bin_path) = resolve_helper_bin_path() else {
+            log::error!(
+                "no polkit-agent-helper-1 found; set POLKIT_AGENT_HELPER_1 or install it at one of {HELPER_BIN_CANDIDATES:?}"
+            );
+
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "polkit-agent-helper-1 not found",
+            ));
+        };
+        log::trace!("using helper binary from: {}", helper_bin_path.display());
 
         let mut child = Command::new(helper_bin_path)
             .kill_on_drop(true)
@@ -289,4 +329,88 @@ fn event(line: &str) -> Result<Event, &str> {
             return Err(unknown_prefix);
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FEDORA_HELPER: &str = "/usr/lib/polkit-1/polkit-agent-helper-1";
+    const NIX_HELPER: &str = "/run/wrappers/bin/polkit-agent-helper-1";
+
+    fn present(paths: &'static [&'static str]) -> impl Fn(&Path) -> bool {
+        move |path| paths.iter().any(|present| Path::new(present) == path)
+    }
+
+    #[test]
+    fn compile_time_override_is_used_when_the_environment_is_silent() {
+        // How a Fedora build behaves today: `just build-release` bakes the path in.
+        assert_eq!(
+            resolve_helper_bin_path_in(
+                None,
+                Some(FEDORA_HELPER),
+                HELPER_BIN_CANDIDATES,
+                &present(&[])
+            ),
+            Some(PathBuf::from(FEDORA_HELPER))
+        );
+    }
+
+    #[test]
+    fn runtime_override_wins_over_the_compile_time_one() {
+        let store_helper = "/nix/store/00000000-polkit/lib/polkit-1/polkit-agent-helper-1";
+
+        assert_eq!(
+            resolve_helper_bin_path_in(
+                Some(OsString::from(store_helper)),
+                Some(FEDORA_HELPER),
+                HELPER_BIN_CANDIDATES,
+                &present(&[FEDORA_HELPER])
+            ),
+            Some(PathBuf::from(store_helper))
+        );
+    }
+
+    #[test]
+    fn empty_overrides_are_ignored() {
+        assert_eq!(
+            resolve_helper_bin_path_in(
+                Some(OsString::new()),
+                Some(""),
+                HELPER_BIN_CANDIDATES,
+                &present(&[FEDORA_HELPER])
+            ),
+            Some(PathBuf::from(FEDORA_HELPER))
+        );
+    }
+
+    #[test]
+    fn fhs_layout_is_probed() {
+        assert_eq!(
+            resolve_helper_bin_path_in(
+                None,
+                None,
+                HELPER_BIN_CANDIDATES,
+                &present(&[FEDORA_HELPER])
+            ),
+            Some(PathBuf::from(FEDORA_HELPER))
+        );
+    }
+
+    #[test]
+    fn nix_layout_is_probed() {
+        // Nothing under /usr exists there; the setuid wrapper does.
+        assert_eq!(
+            resolve_helper_bin_path_in(None, None, HELPER_BIN_CANDIDATES, &present(&[NIX_HELPER])),
+            Some(PathBuf::from(NIX_HELPER))
+        );
+    }
+
+    #[test]
+    fn nothing_found_is_reported_rather_than_spawned() {
+        assert_eq!(
+            resolve_helper_bin_path_in(None, None, HELPER_BIN_CANDIDATES, &present(&[])),
+            None
+        );
+    }
 }
