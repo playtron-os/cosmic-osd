@@ -1,3 +1,10 @@
+## [1.3.1](https://github.com/playtron-os/cosmic-osd/compare/v1.3.0...v1.3.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **audio:** don't show the volume OSD for a Bluetooth profile switch ([03f4c43](https://github.com/playtron-os/cosmic-osd/commit/03f4c43e37558e8db7dfb3b2578b5bf2a1d7df3c))
+
 # [1.3.0](https://github.com/playtron-os/cosmic-osd/compare/v1.2.2...v1.3.0) (2026-08-12)
 
 
