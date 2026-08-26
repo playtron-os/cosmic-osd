@@ -16,6 +16,17 @@ vars:
   IMAGE_NAME: "{{.NAME}}-builder"
   IMAGE_TAG:
     sh: sha256sum Dockerfile | cut -d' ' -f1
+  # Directory name of this checkout. The remote copy keeps the same name.
+  PROJECT:
+    sh: basename "$PWD"
+  PREFIX: '{{.PREFIX | default "/usr"}}'
+  DESTDIR: '{{.DESTDIR | default ""}}'
+  # Everything the device does not need, and must not have deleted out from
+  # under it: `target` is the remote build cache, `.cache` is the container
+  # build's cargo home.
+  RSYNC_EXCLUDES: >-
+    --exclude=.git --exclude=target --exclude=.cache --exclude=dist
+    --exclude=builder --exclude=node_modules
 
 tasks:
   default:
@@ -62,6 +73,65 @@ tasks:
         {{- end }}
     cmds:
       - ./target/{{.TARGET_ARCH}}/debug/{{.NAME}}
+
+  install:
+    desc: Install the debug build locally
+    deps:
+      - build:debug
+    cmds:
+      - sudo install -D -m 755 ./target/{{.TARGET_ARCH}}/debug/{{.NAME}}
+        {{.DESTDIR}}{{.PREFIX}}/bin/{{.NAME}}
+      # restorecon, because a file installed from a user checkout inherits
+      # user_home_t and the session then cannot exec it under enforcing SELinux.
+      - sudo restorecon {{.DESTDIR}}{{.PREFIX}}/bin/{{.NAME}} 2>/dev/null || true
+      - echo "Installed {{.NAME}} to {{.DESTDIR}}{{.PREFIX}}/bin"
+
+  deploy:native:
+    desc: >-
+      Rsync this checkout to a device, build it natively there, and install the
+      debug build. E.g. go-task deploy:native HOST=playtron@192.168.1.115
+    aliases:
+      - deploy:device
+    requires:
+      vars:
+        - name: HOST
+    vars:
+      # Parent of the remote checkout.
+      REMOTE_ROOT: '{{.REMOTE_ROOT | default "~/src"}}'
+      REMOTE_DIR: "{{.REMOTE_ROOT}}/{{.PROJECT}}"
+    preconditions:
+      - sh: which rsync
+        msg: "Prerequisite utility 'rsync' is not installed"
+      - sh: ssh -o BatchMode=yes -o ConnectTimeout=10 {{.HOST}} true
+        msg: "Cannot reach {{.HOST}} over SSH without a password. Set up key auth first."
+      - sh: ssh {{.HOST}} 'command -v cargo'
+        msg: >-
+          No cargo on {{.HOST}}. This target builds natively on the device, so it
+          needs a Rust toolchain and the usual -devel packages there.
+      - sh: ssh {{.HOST}} 'command -v go-task || command -v task'
+        msg: "No go-task on {{.HOST}}; it runs the build and install steps there."
+      # /usr is read-only on a bootc image until it is overlaid, and the install
+      # step writes into {{.PREFIX}}/bin.
+      - sh: ssh {{.HOST}} 'findmnt -no OPTIONS {{.PREFIX}} | grep -q "^rw"'
+        msg: >-
+          {{.PREFIX}} is read-only on {{.HOST}}. Run `sudo bootc usr-overlay` there
+          first — it is transient, so it has to be redone after every reboot.
+    cmds:
+      - echo "Syncing {{.PROJECT}} to {{.HOST}}:{{.REMOTE_DIR}}"
+      - ssh {{.HOST}} 'mkdir -p {{.REMOTE_ROOT}}'
+      # --delete keeps the remote tree honest about removals; the excludes above
+      # are protected from it, so the remote `target` cache survives.
+      - rsync -az --delete {{.RSYNC_EXCLUDES}} ./ {{.HOST}}:{{.REMOTE_DIR}}/
+      - echo "Building and installing on {{.HOST}} (first run compiles from scratch)"
+      # -t so the remote `sudo install` can prompt. Every dependency is a public
+      # https git URL, so no agent forwarding is needed for the fetch.
+      - ssh -t {{.HOST}} 'cd {{.REMOTE_DIR}} &&
+        $(command -v go-task || command -v task) install'
+      # cosmic-session supervises the OSD (SESSION_COMPONENTS), so dropping the
+      # old process is how the new binary gets picked up.
+      - cmd: ssh {{.HOST}} 'pkill -x {{.NAME}} || true'
+        ignore_error: true
+      - echo "Done. {{.NAME}} installed on {{.HOST}}; the session should respawn it."
 
   dist:prepare:
     desc: Prepare the project for packaging
