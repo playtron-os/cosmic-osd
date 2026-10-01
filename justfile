@@ -1,6 +1,8 @@
 name := 'cosmic-osd'
 rootdir := ''
 prefix := '/usr'
+# Build-time default only: at runtime POLKIT_AGENT_HELPER_1 in the environment
+# takes precedence, and known distro locations are probed if neither is set.
 polkit-agent-helper-1 := '/usr/lib/polkit-1/polkit-agent-helper-1'
 cargo-target-dir := env('CARGO_TARGET_DIR', 'target')
 

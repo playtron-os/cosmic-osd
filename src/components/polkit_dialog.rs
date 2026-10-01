@@ -22,16 +22,26 @@ use tokio::sync::oneshot;
 pub static POLKIT_DIALOG_ID: LazyLock<widget::Id> =
     LazyLock::new(|| widget::Id::new("polkit-dialog".to_string()));
 
+/// Channel the dialog answers on. Wrapped in `Arc<Mutex<Option<..>>>` because the sender
+/// is single-use but the params are cloned across the surface lifecycle.
+pub type ResponseSender = Arc<Mutex<Option<oneshot::Sender<Result<(), PolkitError>>>>>;
+
 #[derive(Clone, Debug)]
 pub struct Params {
     pub pw_name: String,
+    /// Part of the polkit `BeginAuthentication` payload. Retained so this struct stays
+    /// faithful to the wire format and shows up in `Debug` output when diagnosing
+    /// authentication failures, even though the dialog does not render it.
+    #[allow(dead_code)]
     pub action_id: String,
     pub message: String,
     pub icon_name: Option<String>,
+    /// As `action_id`: part of the payload, kept for fidelity and diagnostics.
+    #[allow(dead_code)]
     pub details: HashMap<String, String>,
     pub cookie: String,
     // XXX `Clone` bound is awkward here
-    pub response_sender: Arc<Mutex<Option<oneshot::Sender<Result<(), PolkitError>>>>>,
+    pub response_sender: ResponseSender,
 }
 
 #[derive(Clone, Debug)]
@@ -71,7 +81,7 @@ impl State {
     ) -> (Self, Task<cosmic::Action<T>>) {
         let text_input_id = iced::id::Id::unique();
         let cmd = cosmic::surface::surface_task(simple_layer_shell(
-            || LiveSettings::default(),
+            LiveSettings::default,
             move || SctkLayerSurfaceSettings {
                 id,
                 keyboard_interactivity: KeyboardInteractivity::Exclusive,

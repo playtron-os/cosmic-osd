@@ -218,7 +218,9 @@ pub enum Msg {
 }
 
 enum Surface {
-    PolkitDialog(polkit_dialog::State),
+    // Boxed: this variant is ~400 bytes against OsdIndicator's ~56, so an unboxed
+    // enum would make every Surface that large.
+    PolkitDialog(Box<polkit_dialog::State>),
     OsdIndicator(osd_indicator::State),
 }
 
@@ -368,11 +370,13 @@ impl App {
                 ),
             )
         }) {
-            let (mut top, mut left, mut bottom, mut right) = if is_display_number {
-                (0, 0, 48, 0) // Top margin for display numbers
-            } else {
-                (0, 0, 48, 0) // Bottom margin for other OSDs
-            };
+            // Both branches were already identical, so this preserves current behaviour
+            // exactly. NOTE: the comments they carried claimed a *top* margin for display
+            // numbers and a *bottom* margin for everything else, but the tuple is
+            // (top, left, bottom, right) and both set only `bottom` — so display numbers
+            // have never actually been given a top margin. Left as-is deliberately;
+            // changing it moves where those OSDs render.
+            let (mut top, mut left, mut bottom, mut right) = (0, 0, 48, 0);
             for overlap in self.overlap.values() {
                 let tl = tl.intersects(overlap);
                 let tr = tr.intersects(overlap);
@@ -591,7 +595,7 @@ impl cosmic::Application for App {
                     let id = SurfaceId::unique();
                     self.action_to_confirm = Some((id, action, COUNTDOWN_LENGTH));
                     cosmic::surface::surface_task(simple_layer_shell(
-                        || LiveSettings::default(),
+                        LiveSettings::default,
                         move || SctkLayerSurfaceSettings {
                             id,
                             keyboard_interactivity: KeyboardInteractivity::Exclusive,
@@ -656,7 +660,8 @@ impl cosmic::Application for App {
                     log::trace!("create polkit dialog: {}", params.cookie);
                     let id = SurfaceId::unique();
                     let (state, cmd) = polkit_dialog::State::new(id, params);
-                    self.surfaces.insert(id, Surface::PolkitDialog(state));
+                    self.surfaces
+                        .insert(id, Surface::PolkitDialog(Box::new(state)));
                     cmd
                 }
                 polkit_agent::Event::CancelDialog { cookie } => {
@@ -683,7 +688,8 @@ impl cosmic::Application for App {
                 if let Some(Surface::PolkitDialog(state)) = self.surfaces.remove(&id) {
                     let (state, cmd) = state.update(msg);
                     if let Some(state) = state {
-                        self.surfaces.insert(id, Surface::PolkitDialog(state));
+                        self.surfaces
+                            .insert(id, Surface::PolkitDialog(Box::new(state)));
                     }
                     return cmd.map(move |msg| cosmic::action::app(Msg::PolkitDialog((id, msg))));
                 }
@@ -825,7 +831,6 @@ impl cosmic::Application for App {
                 Task::none()
             }
             Msg::Size(id, size) => {
-                if self.dummy_id.is_none_or(|dummy| id == dummy) {}
                 if self.dummy_id.is_some_and(|d| d != id) {
                     self.size = Some(size);
                     let mut tasks = Vec::with_capacity(3);
@@ -912,9 +917,9 @@ impl cosmic::Application for App {
                     log::debug!("Display '{}' added to wayland outputs tracking", name);
                 }
                 if self.dummy_id.is_none() {
-                    return self.create_dummy_layer_surface();
+                    self.create_dummy_layer_surface()
                 } else {
-                    return Task::none();
+                    Task::none()
                 }
             }
             Msg::OutputRemoved(output) => {
@@ -1578,7 +1583,7 @@ impl cosmic::Application for App {
                     let id = SurfaceId::unique();
                     self.action_to_confirm = Some((id, cmd, COUNTDOWN_LENGTH));
                     return cosmic::surface::surface_task(simple_layer_shell(
-                        || LiveSettings::default(),
+                        LiveSettings::default,
                         move || SctkLayerSurfaceSettings {
                             id,
                             keyboard_interactivity: KeyboardInteractivity::Exclusive,
