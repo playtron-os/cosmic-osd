@@ -1,3 +1,11 @@
+## [1.3.2](https://github.com/playtron-os/cosmic-osd/compare/v1.3.1...v1.3.2) (2026-10-01)
+
+
+### Bug Fixes
+
+* clear the clippy warnings failing CI ([27df07d](https://github.com/playtron-os/cosmic-osd/commit/27df07db0823586f9119d8244a666c1f047fafff))
+* resolve polkit-agent-helper-1 at runtime instead of baking an FHS path ([0ee85aa](https://github.com/playtron-os/cosmic-osd/commit/0ee85aaaa7d0b5e923c37777a63bd98314eff9b2))
+
 ## [1.3.1](https://github.com/playtron-os/cosmic-osd/compare/v1.3.0...v1.3.1) (2026-08-26)
 
 
