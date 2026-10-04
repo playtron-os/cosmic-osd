@@ -132,7 +132,7 @@ pub enum Msg {
 }
 
 /// How long the indicator takes to grow out of the corner, and to go back.
-const ENTER: Duration = Duration::from_millis(260);
+const ENTER: Duration = Duration::from_millis(340);
 const EXIT: Duration = Duration::from_millis(200);
 /// How long the bar takes to reach a new level.
 const GLIDE: Duration = Duration::from_millis(160);
@@ -240,6 +240,25 @@ fn blur_behind(id: SurfaceId, size: Option<(i32, i32)>) -> Task<Msg> {
             id, rects,
         )),
     ))
+}
+
+/// A Lucide glyph in `color`, alpha included. A symbolic icon takes its colour
+/// from the theme and drops the alpha, so it could not fade with the rest.
+fn glyph_at<'a>(bytes: &'static [u8], size: u16, color: Color) -> Element<'a, Msg> {
+    let Some(handle) = lucide_icon(bytes, size).into_svg_handle() else {
+        return widget::Space::new().into();
+    };
+    iced::widget::Svg::<cosmic::Theme>::new(handle)
+        .symbolic(true)
+        .class(cosmic::theme::Svg::custom(move |_| {
+            iced::widget::svg::Style {
+                color: Some(Color { a: 1.0, ..color }),
+            }
+        }))
+        .width(Length::Fixed(f32::from(size)))
+        .height(Length::Fixed(f32::from(size)))
+        .opacity(color.a)
+        .into()
 }
 
 /// How far the pill has grown at `presence`, 0 to 1.
@@ -545,7 +564,7 @@ impl State {
                 }));
 
             let row = iced::widget::row![
-                lucide_icon(glyph, 20),
+                glyph_at(glyph, 20, faded(ink, 0.92)),
                 bar,
                 widget::text::body(format!("{value}%"))
                     .width(Length::Fixed(40.0))
@@ -557,7 +576,7 @@ impl State {
             .into();
             (row, PILL_WIDTH)
         } else {
-            (lucide_icon(glyph, 24).into(), PILL_HEIGHT)
+            (glyph_at(glyph, 24, faded(ink, 0.92)), PILL_HEIGHT)
         };
 
         // Tinted glass over the compositor's blur, the size it has grown to.
