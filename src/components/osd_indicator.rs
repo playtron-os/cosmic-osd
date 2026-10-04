@@ -511,21 +511,7 @@ impl State {
         let (content, width): (Element<'_, Msg>, f32) = if let Some(value) = self.params.value() {
             let level = self.level.at(now).clamp(0.0, 1.0);
             let accent: Color = cosmic::theme::active().cosmic().accent_color().into();
-            let filled = (level * 1000.0).round() as u16;
-            let fill = iced::widget::row![
-                widget::container(widget::Space::new())
-                    .width(Length::FillPortion(filled))
-                    .height(Length::Fill)
-                    .class(cosmic::theme::Container::custom(move |_| {
-                        widget::container::Style {
-                            background: Some(faded(accent, 1.0).into()),
-                            border: Border::default().rounded(3.0),
-                            ..Default::default()
-                        }
-                    })),
-                widget::Space::new().width(Length::FillPortion(1000 - filled)),
-            ]
-            .height(Length::Fill);
+            let fill = level_fill((level * 1000.0).round() as u16, faded(accent, 1.0));
             // Amplified, the bar runs to 150%: a tick marks where 100% is, or
             // 65% would read as under half.
             let max_value = self.max_value();
@@ -698,9 +684,68 @@ impl State {
     }
 }
 
+/// The bar's filled part, `filled` thousandths of the track, in `color`.
+fn level_fill<'a, M: 'a, R: iced::advanced::Renderer + 'a>(
+    filled: u16,
+    color: Color,
+) -> iced::widget::Row<'a, M, cosmic::Theme, R> {
+    // A portion of 0 is not zero wide: iced sizes it like Fill, so an empty
+    // or full bar leaves that side out.
+    let mut fill = iced::widget::Row::new().height(Length::Fill);
+    if filled > 0 {
+        fill = fill.push(
+            iced::widget::container(iced::widget::Space::new())
+                .width(Length::FillPortion(filled))
+                .height(Length::Fill)
+                .class(cosmic::theme::Container::custom(move |_| {
+                    widget::container::Style {
+                        background: Some(color.into()),
+                        border: Border::default().rounded(3.0),
+                        ..Default::default()
+                    }
+                })),
+        );
+    }
+    if filled < 1000 {
+        fill = fill.push(iced::widget::Space::new().width(Length::FillPortion(1000 - filled)));
+    }
+    fill
+}
+
 #[cfg(test)]
 mod tests {
     use super::Tween;
+
+    #[test]
+    fn the_bar_fills_as_far_as_the_level_and_no_further() {
+        use cosmic::iced::advanced::layout::Limits;
+        use cosmic::iced::advanced::widget::{Tree, Widget};
+        use cosmic::iced::{Color, Size};
+
+        for (filled, want) in [
+            (0, 0.0),
+            (1, 0.2),
+            (500, 100.0),
+            (999, 199.8),
+            (1000, 200.0),
+        ] {
+            let mut bar: cosmic::iced::widget::Row<'_, (), cosmic::Theme, ()> =
+                super::level_fill(filled, Color::WHITE);
+            let mut tree = Tree::new(&bar as &dyn Widget<(), cosmic::Theme, ()>);
+            let node = bar.layout(
+                &mut tree,
+                &(),
+                &Limits::new(Size::ZERO, Size::new(200.0, 6.0)),
+            );
+            let widths: Vec<f32> = node.children().iter().map(|c| c.bounds().width).collect();
+            let shown = if filled > 0 { widths[0] } else { 0.0 };
+            assert!((shown - want).abs() < 0.5, "{filled}: {widths:?}");
+            assert!(
+                (widths.iter().sum::<f32>() - 200.0).abs() < 0.5,
+                "{filled}: {widths:?}"
+            );
+        }
+    }
     use std::time::{Duration, Instant};
 
     #[test]
