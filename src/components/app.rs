@@ -294,10 +294,11 @@ impl App {
     }
 
     /// [`create_indicator`](Self::create_indicator) for volume and brightness,
-    /// which a panel popup can suppress. Display identifiers, airplane mode and
-    /// the like are never suppressed — nothing else on screen shows them.
+    /// which a panel popup can suppress and the system can turn off. Display
+    /// identifiers, airplane mode and the like are never suppressed — nothing
+    /// else on screen shows them.
     fn create_value_indicator(&mut self, params: osd_indicator::Params) -> cosmic::app::Task<Msg> {
-        if self.value_osd_suppressed() {
+        if !crate::config::value_indicators() || self.value_osd_suppressed() {
             return Task::none();
         }
         self.create_indicator(params)
@@ -821,7 +822,10 @@ impl cosmic::Application for App {
                         Task::none()
                     } else if self.keyboard_brightness != Some(brightness) {
                         self.keyboard_brightness = Some(brightness);
-                        if let Some(max_brightness) = self.max_keyboard_brightness {
+                        // A brightness like the screen's, under the same switch.
+                        if let Some(max_brightness) = self.max_keyboard_brightness
+                            && crate::config::value_indicators()
+                        {
                             self.create_indicator(osd_indicator::Params::KeyboardBrightness(
                                 brightness as f64 / max_brightness as f64,
                             ))
