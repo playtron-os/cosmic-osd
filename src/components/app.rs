@@ -342,6 +342,30 @@ impl App {
 
         let is_display_number = matches!(state.params(), &Params::DisplayNumber(_));
 
+        // The top-left pill keeps its own room from the corner, the panel's
+        // exclusive zone already keeps it clear, and it sets its own blur. The
+        // radius is the pill's: the compositor rounds each blurred rect with
+        // it, clamped to half the rect's shorter side, so the blur keeps the
+        // pill's shape as it grows.
+        if !is_display_number {
+            state.margin = (0, 0, 0, 0);
+            self.margin = IcedMargin::default();
+            let radius = osd_indicator::PILL_RADIUS;
+            return Task::batch([
+                set_margin::<()>(*id, 0, 0, 0, 0).discard(),
+                corner_radius(
+                    *id,
+                    Some(CornerRadius {
+                        top_left: radius,
+                        top_right: radius,
+                        bottom_left: radius,
+                        bottom_right: radius,
+                    }),
+                )
+                .discard(),
+            ]);
+        }
+
         if let Some((bl, br, tl, tr)) = self.size.as_ref().map(|s| {
             let mut s = *s;
             s.width = 600.;
@@ -1255,6 +1279,17 @@ impl cosmic::Application for App {
         );
         if self.action_to_confirm.is_some() {
             subscriptions.push(time::every(Duration::from_millis(1000)).map(|_| Msg::Countdown));
+        }
+        // Frames only while the indicator moves; a resting one costs nothing.
+        if self
+            .indicator
+            .as_ref()
+            .is_some_and(|(_, state)| state.animating(Instant::now()))
+        {
+            subscriptions.push(
+                time::every(Duration::from_millis(16))
+                    .map(|_| Msg::OsdIndicator(osd_indicator::Msg::Ignore)),
+            );
         }
 
         iced::Subscription::batch(subscriptions)
