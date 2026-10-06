@@ -1,3 +1,17 @@
+# [1.4.0](https://github.com/playtron-os/cosmic-osd/compare/v1.3.2...v1.4.0) (2026-10-06)
+
+
+### Bug Fixes
+
+* **indicator:** fade the glyph with the pill, and grow it slower ([8ea72ec](https://github.com/playtron-os/cosmic-osd/commit/8ea72ec3788d6b2f99ad68028c5be6a291720284))
+* **indicator:** show an empty bar at 0% and a full one at 100% ([6b699bf](https://github.com/playtron-os/cosmic-osd/commit/6b699bf8f7d54ea93ba54f7d264e1af2b25dc403))
+
+
+### Features
+
+* **config:** let a system turn the value indicators off ([ba84124](https://github.com/playtron-os/cosmic-osd/commit/ba841244a571351a4869f936be996f556f63d068))
+* **indicator:** a blurred glass pill in the top-left corner ([75a2e44](https://github.com/playtron-os/cosmic-osd/commit/75a2e443c5c3cc49af0aaecf56324e6872b3cd4e))
+
 ## [1.3.2](https://github.com/playtron-os/cosmic-osd/compare/v1.3.1...v1.3.2) (2026-10-01)
 
 
