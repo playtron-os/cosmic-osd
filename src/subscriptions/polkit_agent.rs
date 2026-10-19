@@ -1,7 +1,7 @@
 // TODO: only open one dialog at a time?
 
 use cosmic::iced::Subscription;
-use cosmic::iced::futures::FutureExt;
+use cosmic::iced::futures::{FutureExt, StreamExt};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::{Arc, Mutex};
@@ -36,15 +36,15 @@ pub fn subscription(system_connection: zbus::Connection) -> Subscription<Event> 
          }| {
             let connection = system_connection.clone();
             async move {
-            let (sender, receiver) = mpsc::channel(32);
-            tokio::spawn(async move {
-                if let Err(e) = register_agent(&connection, sender).await {
-                    log::warn!("Failed to register PolicyKit agent: {}. This is normal if an agent is already registered.", e);
-                }
-            });
-            ReceiverStream::new(receiver)
-        }
-        .flatten_stream()
+                let (sender, receiver) = mpsc::channel(32);
+                tokio::spawn(async move {
+                    if let Err(e) = serve_agent(&connection, sender).await {
+                        log::warn!("Failed to serve the PolicyKit agent: {}", e);
+                    }
+                });
+                ReceiverStream::new(receiver)
+            }
+            .flatten_stream()
         },
     )
 }
@@ -185,7 +185,10 @@ fn select_user_from_identities(identities: &[Identity]) -> Option<(u32, String)>
     Some((uid, user.name().to_str()?.to_string()))
 }
 
-async fn register_agent(
+/// Serve the agent and register it with polkit, then again with every polkitd
+/// that takes over: a restarted polkitd, as an OS update leaves it, has
+/// forgotten every agent, and no dialog would show until the next login.
+async fn serve_agent(
     system_connection: &zbus::Connection,
     sender: mpsc::Sender<Event>,
 ) -> zbus::Result<()> {
@@ -197,7 +200,21 @@ async fn register_agent(
 
     let session = LogindSessionProxy::new(system_connection).await?;
     let session_id = session.id().await?;
+    let authority = PolkitAuthorityProxy::new(system_connection).await?;
+    // Watched before the first registration, so a restart in between is seen.
+    let mut owners = authority.inner().receive_owner_changed().await?;
 
+    register_agent(&authority, &session_id).await;
+    while let Some(owner) = owners.next().await {
+        if owner.is_some() {
+            log::info!("polkit restarted; registering the PolicyKit agent again");
+            register_agent(&authority, &session_id).await;
+        }
+    }
+    Ok(())
+}
+
+async fn register_agent(authority: &PolkitAuthorityProxy<'_>, session_id: &str) {
     let mut subject_details = HashMap::new();
     subject_details.insert("session-id", session_id.into());
     let subject = Subject {
@@ -206,9 +223,13 @@ async fn register_agent(
     };
 
     // XXX locale
-    let authority = PolkitAuthorityProxy::new(system_connection).await?;
-    authority
+    if let Err(e) = authority
         .register_authentication_agent(subject, "en_US", OBJECT_PATH)
-        .await?;
-    Ok(())
+        .await
+    {
+        log::warn!(
+            "Failed to register PolicyKit agent: {}. This is normal if an agent is already registered.",
+            e
+        );
+    }
 }
