@@ -1,3 +1,10 @@
+## [1.4.1](https://github.com/playtron-os/cosmic-osd/compare/v1.4.0...v1.4.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **polkit:** register the agent again when polkitd restarts ([5f37486](https://github.com/playtron-os/cosmic-osd/commit/5f3748658e7df8327b3e5b9d8b0b854d9298ec56))
+
 # [1.4.0](https://github.com/playtron-os/cosmic-osd/compare/v1.3.2...v1.4.0) (2026-10-06)
 
 
