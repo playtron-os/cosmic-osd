@@ -1,3 +1,10 @@
+## [1.4.2](https://github.com/playtron-os/cosmic-osd/compare/v1.4.1...v1.4.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **theme:** stop logging a missing list_button key at start ([9dd0152](https://github.com/playtron-os/cosmic-osd/commit/9dd0152c83f8bcacfac04359685e99ac6230e46b))
+
 ## [1.4.1](https://github.com/playtron-os/cosmic-osd/compare/v1.4.0...v1.4.1) (2026-10-19)
 
 
